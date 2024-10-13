@@ -1,23 +1,29 @@
-from fastapi import FastAPI, Depends, HTTPException
-from .models import QueryRequest, QueryResponse
-from .services import AuthService
-from .utils import log_request
+from fastapi import FastAPI, HTTPException
+from .models import AuthRequest, AuthResponse, RefreshTokenRequest
+from .auth_service import AuthService
 
 app = FastAPI()
+
 auth_service = AuthService()
 
-@app.post("/execute_query", response_model=QueryResponse)
-def execute_query(query_request: QueryRequest):
-    log_request(query_request.sql_query)
-
-    # Authenticate user by API key
-    user = auth_service.get_user_by_api_key(query_request.api_key)
-
-    # Validate the query against user's entitlements
+@app.post("/validate-query/", response_model=AuthResponse)
+def validate_query(request: AuthRequest):
+    """
+    API to validate user permissions and entitlements based on API key.
+    """
     try:
-        auth_service.validate_query(user, query_request.sql_query)
-    except HTTPException as e:
-        return QueryResponse(message=e.detail, status="error")
+        auth_response = auth_service.validate_api_key(request)
+        return auth_response
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
 
-    # If no issues, return success response (actual query execution logic can be added later)
-    return QueryResponse(message="Query executed successfully", status="success")
+@app.post("/refresh-token/")
+def refresh_token(request: RefreshTokenRequest):
+    """
+    API to refresh access token for a specific application.
+    """
+    try:
+        result = auth_service.refresh_access_token(request)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Failed to refresh access token.")
